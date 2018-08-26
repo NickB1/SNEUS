@@ -5,6 +5,11 @@
 #include <Wire.h>
 #include <RFM22.h>
 #include <TinyGPS.h>
+#include "SparkFunCCS811.h"
+#include <Wire.h>
+#include "ClosedCube_HDC1080.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BMP280.h>
 
 #define RFM22_FREQUENCY 434.240
 
@@ -24,6 +29,8 @@
 #define GEIGER_SHORT_PERIOD   5   // # or samples for fast avg mode
 #define GEIGER_SCALE_FACTOR   57    //  CPM to uSv/hr conversion factor (x10,000 to avoid float)
 
+#define CCS811_ADDR 0x5A //CS811 I2C Address
+
 //Pins
 #define RFM22B_CS_PIN   10
 #define GEIGER_INT_PIN  3
@@ -33,6 +40,9 @@
 
 TinyGPS gps;
 rfm22 radio1(RFM22B_CS_PIN);
+CCS811 AirQ(CCS811_ADDR);
+ClosedCube_HDC1080 hdc1080;
+Adafruit_BMP280 bmp; 
 
 char callsign[8] = "SNEUS-1"; //Callsign
 
@@ -123,6 +133,10 @@ void setup()
   //Setup RFM22B
   setupRadio();
 
+  // setup I2C sensors
+  CCS811Core::status returnCode = AirQ.begin();
+  hdc1080.begin(0x40);
+  
   blink_success();
 }
  
@@ -172,6 +186,19 @@ void loop()
     bat_v1 = bat_actualValue;
     bat_v2 = (bat_actualValue - bat_v1) * 100;
     snprintf(bat_voltage, 30, "%i.%02i", bat_v1, bat_v2);
+
+    //Read I2C Sensors
+    if (AirQ.dataAvailable())
+  {
+    // get and print data from CCS811 (CO2 and tVOC)
+    printCCS811();
+    
+    // get and print data from HDC1080 (temperature and relative humidity)
+    printHDC1080(HDC1080_RESOLUTION_14BIT, HDC1080_RESOLUTION_14BIT);
+
+    // get and print data from BMP280 (temperature, pressure, approx altitude)
+    printBMP280();
+  }
     
     //Build new data string
     cBusy = true;
@@ -379,6 +406,50 @@ void blink_success(void)
   digitalWrite(LED, HIGH); 
   delay(500);
   digitalWrite(LED, LOW);
+}
+
+//CCS811
+void printCCS811(){
+    mySensor.readAlgorithmResults();
+
+    Serial.print("CCS811: CO2=[");
+    //Returns calculated CO2 reading
+    Serial.print(mySensor.getCO2());
+    Serial.print("] tVOC=[");
+    //Returns calculated TVOC reading
+    Serial.print(mySensor.getTVOC());
+    Serial.print("] "); 
+    Serial.println(); 
+}
+
+//HDC1080
+void printHDC1080(HDC1080_MeasurementResolution humidity, HDC1080_MeasurementResolution temperature) {
+  hdc1080.setResolution(humidity, temperature);
+
+  HDC1080_Registers reg = hdc1080.readRegister();
+
+  Serial.print("HDC1080: T=[");
+  Serial.print(hdc1080.readTemperature());
+  Serial.print("C] RH=[");
+  Serial.print(hdc1080.readHumidity());
+  Serial.println("%]");
+}
+
+//BMP280
+void printBMP280(){
+    Serial.print("BMP280: T=[");
+    Serial.print(bmp.readTemperature());
+    Serial.print("]");
+    
+    Serial.print(" P=[");
+    Serial.print(bmp.readPressure());
+    Serial.print("]");
+
+    Serial.print(" ALT=[");
+    Serial.print(bmp.readAltitude(1013.25)); // this should be adjusted to your local forcase
+    Serial.println(" m]");
+   
+    Serial.println();
 }
 
 ISR(TIMER1_COMPA_vect)
