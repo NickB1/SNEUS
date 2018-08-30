@@ -24,12 +24,12 @@
 #define RFM22B_SDN 8
 #define RFM22B_REINIT_CNT 8
 
-#define GEIGER_THRESHOLD    1000  // CPM threshold for fast avg mode
+#define GEIGER_THRESHOLD      1000  // CPM threshold for fast avg mode
 #define GEIGER_LONG_PERIOD    60    // # of samples to keep in memory in slow avg mode
-#define GEIGER_SHORT_PERIOD   5   // # or samples for fast avg mode
+#define GEIGER_SHORT_PERIOD   5     // # or samples for fast avg mode
 #define GEIGER_SCALE_FACTOR   57    //  CPM to uSv/hr conversion factor (x10,000 to avoid float)
 
-#define CCS811_ADDR 0x5A //CS811 I2C Address
+#define CCS811_ADDR 0x5A  //CS811 I2C Address
 
 //Pins
 #define RFM22B_CS_PIN   10
@@ -97,6 +97,15 @@ long int        ialt = 0;
 bool  rfm22_reinit = false;
 bool  rfm22_reinit_done = false;
 int   rfm22_reinitcntr = 0;
+
+//Sensor Global Variables
+int   CCS811_CO2 = 0;
+int   CCS811_TVOC = 0;
+int   HDC1080_temp = 0;
+int   HDC1080_humidity = 0;
+int   BMP280_temp = 0;
+int   BMP280_pressure = 0;
+int   BMP280_alt = 0;
 
  
 void setup()
@@ -189,16 +198,11 @@ void loop()
 
     //Read I2C Sensors
     if (AirQ.dataAvailable())
-  {
-    // get and print data from CCS811 (CO2 and tVOC)
-    printCCS811();
-    
-    // get and print data from HDC1080 (temperature and relative humidity)
-    printHDC1080(HDC1080_RESOLUTION_14BIT, HDC1080_RESOLUTION_14BIT);
-
-    // get and print data from BMP280 (temperature, pressure, approx altitude)
-    printBMP280();
-  }
+    {
+      read_CCS811();
+      read_HDC1080(HDC1080_RESOLUTION_14BIT, HDC1080_RESOLUTION_14BIT);
+      read_BMP280();
+    }
     
     //Build new data string
     cBusy = true;
@@ -409,47 +413,28 @@ void blink_success(void)
 }
 
 //CCS811
-void printCCS811(){
-    mySensor.readAlgorithmResults();
-
-    Serial.print("CCS811: CO2=[");
-    //Returns calculated CO2 reading
-    Serial.print(mySensor.getCO2());
-    Serial.print("] tVOC=[");
-    //Returns calculated TVOC reading
-    Serial.print(mySensor.getTVOC());
-    Serial.print("] "); 
-    Serial.println(); 
+void read_CCS811()
+{
+  mySensor.readAlgorithmResults();
+  CCS811_CO2 = mySensor.getCO2());
+  CCS811_TVOC = mySensor.getTVOC());
 }
 
 //HDC1080
-void printHDC1080(HDC1080_MeasurementResolution humidity, HDC1080_MeasurementResolution temperature) {
+void read_HDC1080(HDC1080_MeasurementResolution humidity, HDC1080_MeasurementResolution temperature) 
+{
   hdc1080.setResolution(humidity, temperature);
-
   HDC1080_Registers reg = hdc1080.readRegister();
-
-  Serial.print("HDC1080: T=[");
-  Serial.print(hdc1080.readTemperature());
-  Serial.print("C] RH=[");
-  Serial.print(hdc1080.readHumidity());
-  Serial.println("%]");
+  HDC1080_temp = hdc1080.readTemperature();
+  HDC1080_humidity = hdc1080.readHumidity()
 }
 
 //BMP280
-void printBMP280(){
-    Serial.print("BMP280: T=[");
-    Serial.print(bmp.readTemperature());
-    Serial.print("]");
-    
-    Serial.print(" P=[");
-    Serial.print(bmp.readPressure());
-    Serial.print("]");
-
-    Serial.print(" ALT=[");
-    Serial.print(bmp.readAltitude(1013.25)); // this should be adjusted to your local forcase
-    Serial.println(" m]");
-   
-    Serial.println();
+void read_BMP280()
+{
+  BMP280_temp = bmp.readTemperature();
+  BMP280_pressure = bmp.readPressure();
+  BMP280_alt = bmp.readAltitude(1013.25); // this should be adjusted to your local pressure
 }
 
 ISR(TIMER1_COMPA_vect)
