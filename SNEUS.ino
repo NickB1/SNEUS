@@ -6,7 +6,6 @@
 #include <RFM22.h>
 #include <TinyGPS.h>
 #include "SparkFunCCS811.h"
-#include <Wire.h>
 #include "ClosedCube_HDC1080.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
