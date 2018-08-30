@@ -5,6 +5,11 @@
 #include <Wire.h>
 #include <RFM22.h>
 #include <TinyGPS.h>
+#include "SparkFunCCS811.h"
+#include <Wire.h>
+#include "ClosedCube_HDC1080.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BMP280.h>
 
 #define RFM22_FREQUENCY 434.240
 
@@ -19,10 +24,12 @@
 #define RFM22B_SDN 8
 #define RFM22B_REINIT_CNT 8
 
-#define GEIGER_THRESHOLD    1000  // CPM threshold for fast avg mode
+#define GEIGER_THRESHOLD      1000  // CPM threshold for fast avg mode
 #define GEIGER_LONG_PERIOD    60    // # of samples to keep in memory in slow avg mode
-#define GEIGER_SHORT_PERIOD   5   // # or samples for fast avg mode
+#define GEIGER_SHORT_PERIOD   5     // # or samples for fast avg mode
 #define GEIGER_SCALE_FACTOR   57    //  CPM to uSv/hr conversion factor (x10,000 to avoid float)
+
+#define CCS811_ADDR 0x5A  //CS811 I2C Address
 
 //Pins
 #define RFM22B_CS_PIN   10
@@ -33,6 +40,9 @@
 
 TinyGPS gps;
 rfm22 radio1(RFM22B_CS_PIN);
+CCS811 AirQ(CCS811_ADDR);
+ClosedCube_HDC1080 hdc1080;
+Adafruit_BMP280 bmp; 
 
 char callsign[8] = "SNEUS-1"; //Callsign
 
@@ -88,6 +98,15 @@ bool  rfm22_reinit = false;
 bool  rfm22_reinit_done = false;
 int   rfm22_reinitcntr = 0;
 
+//Sensor Global Variables
+int   CCS811_CO2 = 0;
+int   CCS811_TVOC = 0;
+int   HDC1080_temp = 0;
+int   HDC1080_humidity = 0;
+int   BMP280_temp = 0;
+int   BMP280_pressure = 0;
+int   BMP280_alt = 0;
+
  
 void setup()
 { 
@@ -122,6 +141,10 @@ void setup()
   //Setup RFM22B
   init_rfm22();
 
+  // setup I2C sensors
+  CCS811Core::status returnCode = AirQ.begin();
+  hdc1080.begin(0x40);
+  
   blink_led(4);
 }
  
@@ -131,8 +154,16 @@ void loop()
   {
     measure_battery();
     build_telem_string();
+    
+    //Read I2C Sensors
+    if (AirQ.dataAvailable())
+    {
+      read_CCS811();
+      read_HDC1080(HDC1080_RESOLUTION_14BIT, HDC1080_RESOLUTION_14BIT);
+      read_BMP280();
+    }
   }
-
+  
   //Reinitialisation of RFM22
   if(rfm22_reinit == true)
   {
@@ -337,6 +368,31 @@ void init_timer_interrupt(void)
   // enable timer compare interrupt:
   TIMSK1 |= (1 << OCIE1A);
   sei();          // enable global interrupts
+}
+
+//CCS811
+void read_CCS811()
+{
+  AirQ.readAlgorithmResults();
+  CCS811_CO2 = AirQ.getCO2();
+  CCS811_TVOC = AirQ.getTVOC();
+}
+
+//HDC1080
+void read_HDC1080(HDC1080_MeasurementResolution humidity, HDC1080_MeasurementResolution temperature) 
+{
+  hdc1080.setResolution(humidity, temperature);
+  HDC1080_Registers reg = hdc1080.readRegister();
+  HDC1080_temp = hdc1080.readTemperature();
+  HDC1080_humidity = hdc1080.readHumidity();
+}
+
+//BMP280
+void read_BMP280()
+{
+  BMP280_temp = bmp.readTemperature();
+  BMP280_pressure = bmp.readPressure();
+  BMP280_alt = bmp.readAltitude(1013.25); // this should be adjusted to your local pressure
 }
 
 ISR(TIMER1_COMPA_vect)
