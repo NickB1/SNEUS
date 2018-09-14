@@ -98,13 +98,14 @@ bool  rfm22_reinit_done = false;
 int   rfm22_reinitcntr = 0;
 
 //Sensor Global Variables
-int   CCS811_CO2 = 0;
-int   CCS811_TVOC = 0;
-int   HDC1080_temp = 0;
-int   HDC1080_humidity = 0;
-int   BMP280_temp = 0;
-int   BMP280_pressure = 0;
-int   BMP280_alt = 0;
+int       CCS811_CO2 = 0;
+int       CCS811_TVOC = 0;
+int       HDC1080_temp = 0;
+int       HDC1080_humidity = 0;
+int       BMP280_temp = 0;
+float     BMP280_pressure = 0;
+float     BMP280_alt = 0;
+char      c_BMP280_pressure[8];
 
  
 void setup()
@@ -143,6 +144,7 @@ void setup()
   // setup I2C sensors
   CCS811Core::status returnCode = AirQ.begin();
   hdc1080.begin(0x40);
+  bmp.begin();
   
   blink_led(4);
 }
@@ -326,7 +328,7 @@ void build_telem_string(void)
     //Build new data string
     cBusy = true;
     sprintf(tracker_string,"$$$$%s,%li,%02i:%02i:%02i,%s,%s,%s,%i,%s,",callsign,packet_cnt,hour,minute,second,latbuf,lonbuf,altbuf,sats,bat_voltage); 
-    sprintf(sensor_string,"%i",geiger_slowcpm);
+    sprintf(sensor_string,"%i,%i,%i,%i,%i,%s",geiger_slowcpm,CCS811_CO2,CCS811_TVOC,HDC1080_temp,HDC1080_humidity,c_BMP280_pressure);
     strcat(tracker_string,sensor_string);
     unsigned int CHECKSUM = calc_crc16_checksum(tracker_string);  // Calculates the checksum for this tracker_string
     
@@ -392,6 +394,7 @@ void read_BMP280()
   BMP280_temp = bmp.readTemperature();
   BMP280_pressure = bmp.readPressure();
   BMP280_alt = bmp.readAltitude(1013.25); // this should be adjusted to your local pressure
+  dtostrf(BMP280_pressure, 6, 2, c_BMP280_pressure);
 }
 
 ISR(TIMER1_COMPA_vect)
