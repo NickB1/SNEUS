@@ -13,7 +13,7 @@
 #define RFM22_FREQUENCY 434.240
 
 #define WEBSITE_PRINT_FREQ  20
-#define WEBSITE_PRINT_ON    1
+#define WEBSITE_PRINT_ON    0
  
 #define RTTY_ASCII    8       // RTTY_ASCII 7 or 8
 #define RTTY_STOPBITS 2       // Either 1 or 2
@@ -47,11 +47,12 @@ char callsign[8] = "SNEUS-1"; //Callsign
 
 byte gps_init_sucess = 0;
 
+char          syncstring[10] = "$$$$$$$$";
 char          tracker_string[200];
-char          sensor_string[80];
+char          sensor_string[100];
 char          website_string[20] = "ukhas.org.uk";
 char          checksum_str[6];
-char          txstring[200] = "Waiting for GPS";
+char          txstring[300] = "Waiting for GPS";
 volatile int  txstatus=1;
 volatile int  txstringlength=0;
 volatile char txc;
@@ -63,6 +64,7 @@ long int      packet_cnt = 1;
 long int      website_cnt = 1;
 bool          newData = false;
 bool          cBusy = true;
+bool          sync = false;
 
 //Bat Measurement Global Variables
 int   bat_sensorValue = 0;
@@ -100,12 +102,14 @@ int   rfm22_reinitcntr = 0;
 //Sensor Global Variables
 int       CCS811_CO2 = 0;
 int       CCS811_TVOC = 0;
-int       HDC1080_temp = 0;
-int       HDC1080_humidity = 0;
-int       BMP280_temp = 0;
+float     HDC1080_temp = 0;
+float     HDC1080_humidity = 0;
+float     BMP280_temp = 0;
 float     BMP280_pressure = 0;
 float     BMP280_alt = 0;
-char      c_BMP280_pressure[8];
+char      c_HDC1080_temp[10];
+char      c_HDC1080_humidity[10];
+char      c_BMP280_pressure[10];
 
  
 void setup()
@@ -327,8 +331,8 @@ void build_telem_string(void)
 {
     //Build new data string
     cBusy = true;
-    sprintf(tracker_string,"$$$$%s,%li,%02i:%02i:%02i,%s,%s,%s,%i,%s,",callsign,packet_cnt,hour,minute,second,latbuf,lonbuf,altbuf,sats,bat_voltage); 
-    sprintf(sensor_string,"%i,%i,%i,%i,%i,%s",geiger_slowcpm,CCS811_CO2,CCS811_TVOC,HDC1080_temp,HDC1080_humidity,c_BMP280_pressure);
+    sprintf(tracker_string,"$$%s,%li,%02i:%02i:%02i,%s,%s,%s,%i,%s,",callsign,packet_cnt,hour,minute,second,latbuf,lonbuf,altbuf,sats,bat_voltage); 
+    sprintf(sensor_string,"%i,%i,%i,%s,%s,%s",geiger_slowcpm,CCS811_CO2,CCS811_TVOC,c_HDC1080_temp,c_HDC1080_humidity,c_BMP280_pressure);
     strcat(tracker_string,sensor_string);
     unsigned int CHECKSUM = calc_crc16_checksum(tracker_string);  // Calculates the checksum for this tracker_string
     
@@ -345,8 +349,8 @@ uint16_t calc_crc16_checksum(char *string)
  
   crc = 0xFFFF;
  
-  // Calculate checksum ignoring the first four $s
-  for (i = 4; i < strlen(string); i++)
+  // Calculate checksum ignoring the first two $s
+  for (i = 2; i < strlen(string); i++)
   {
     c = string[i];
     crc = _crc_xmodem_update (crc, c);
@@ -386,6 +390,10 @@ void read_HDC1080(HDC1080_MeasurementResolution humidity, HDC1080_MeasurementRes
   HDC1080_Registers reg = hdc1080.readRegister();
   HDC1080_temp = hdc1080.readTemperature();
   HDC1080_humidity = hdc1080.readHumidity();
+
+  dtostrf(HDC1080_temp, 0, 1, c_HDC1080_temp);
+  dtostrf(HDC1080_humidity, 0, 1, c_HDC1080_humidity);
+  
 }
 
 //BMP280
@@ -394,7 +402,7 @@ void read_BMP280()
   BMP280_temp = bmp.readTemperature();
   BMP280_pressure = bmp.readPressure();
   BMP280_alt = bmp.readAltitude(1013.25); // this should be adjusted to your local pressure
-  dtostrf(BMP280_pressure, 6, 2, c_BMP280_pressure);
+  dtostrf(BMP280_pressure, 0, 1, c_BMP280_pressure);
 }
 
 ISR(TIMER1_COMPA_vect)
@@ -416,20 +424,29 @@ ISR(TIMER1_COMPA_vect)
       {
         rfm22_reinit = true;
         rfm22_reinitcntr = 0;
+        sync = true;
       }
       else
       {
-        
-        if((website_cnt == WEBSITE_PRINT_FREQ) && (WEBSITE_PRINT_ON == 1))
+        if(sync == true)
         {
-          strcpy(txstring,website_string);
-          website_cnt = 0;
+          strcpy(txstring,syncstring);
+          txstringlength=strlen(txstring);
+          sync = false;
         }
         else
         {
-          strcpy(txstring,tracker_string);
-          packet_cnt++;
-          website_cnt++;
+          if((website_cnt == WEBSITE_PRINT_FREQ) && (WEBSITE_PRINT_ON == 1))
+          {
+            strcpy(txstring,website_string);
+            website_cnt = 0;
+          }
+          else
+          {
+            strcpy(txstring,tracker_string);
+            packet_cnt++;
+            website_cnt++;
+          }
         }
         
         txstringlength=strlen(txstring);
